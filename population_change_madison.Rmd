@@ -1,0 +1,73 @@
+---
+title: "Untitled"
+description: |
+  A new article created using the Distill format.
+author:
+  - name: Nora Jones 
+    url: https://example.com/norajones
+    affiliation: Spacely Sprockets
+    affiliation_url: https://example.com/spacelysprokets
+date: "`r Sys.Date()`"
+output: distill::distill_article
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+We want to better understanding changes in population and demographics in small geographic areas of Madison, using Census data.
+
+```{r}
+library(tidyverse)
+library(tidycensus)
+library(tmap)
+options(tigris_use_cache = TRUE)
+```
+
+Get data
+
+Identify variables
+
+```{r}
+variables_20 <- tidycensus::load_variables(2020, "pl")
+
+variables_2020 <- load_variables(2020, "pl")
+```
+
+
+Have to make decisions on block versus block group. If going with block, need to filter data to make manageable. Block groups seem a little coarse for certain purposes. 
+
+```{r}
+vars10 <- c("P005003", "P005004", "P005006", "P004003")
+dane_2010 <- get_decennial(
+  geography = "block group",
+  variables = vars10, 
+  year = 2010,
+  state = "WI",
+  county = "Dane",
+  geometry = T,
+  summary_var = "P001001") %>%
+  filter(summary_value != 0) %>%
+  mutate(pct = 100 * (value / summary_value))
+
+dane_2020 <- get_decennial(
+  geography = "block group",
+  variables = vars10, 
+  year = 2020,
+  state = "WI",
+  county = "Dane",
+  geometry = T,
+  summary_var = "P001001") %>%
+  filter(summary_value != 0) %>%
+  mutate(pct = 100 * (value / summary_value))
+
+tmap_mode("view")
+dane_2010 %>%
+  tm_shape() +
+  tm_polygons("pct") +
+  tm_facets("variable")
+  ggplot(aes(fill = pct, color = pct)) +
+  geom_sf() +
+  facet_wrap(~variable)
+```
+
