@@ -26,18 +26,43 @@ options(tigris_use_cache = TRUE)
 
 Get data
 
-Identify variables
+# Identifying variables
+For the 2020 Census data, variables are different, as the data released is only in the format provided for redistricting. The `load_variables` command from `tidycensus` loads all variables.
 
 ```{r}
-variables_20 <- tidycensus::load_variables(2020, "pl")
+variables_10 <- tidycensus::load_variables(2010, "sf1")
 
-variables_2020 <- load_variables(2020, "pl")
+variables_20 <- load_variables(2020, "pl")
 ```
 
+For the 2020 data, the two relevant tables are P01 (Race) and P2 ("Hispanic or Latino, and Not Hispanic or Latino by Race") for the total population. `P1_001N` is the total population. `P1_003N` is `White alone`. `P1_004N` is Black/African American alone. `P1_006N` Asian alone. `P2_005N` is non-Hispanic/Latino White. `P2_002N` is Hispanic/Latino of any race.
+
+```{r}
+vars20 <- c("P1_003N", "P1_004N", "P1_006N", "P2_005N", "P2_002N")
+```
 
 Have to make decisions on block versus block group. If going with block, need to filter data to make manageable. Block groups seem a little coarse for certain purposes. 
 
 ```{r}
+dane_2020 <- get_decennial(
+  geography = "block group",
+  variables = vars20, 
+  year = 2020,
+  state = "WI",
+  county = "Dane",
+  geometry = T,
+  summary_var = "P1_001N") %>%
+  filter(summary_value != 0) %>%
+  mutate(pct = 100 * (value / summary_value)) %>% 
+  mutate(variable = case_when(
+    variable == "P1_003N" ~ "White alone",
+    variable == "P1_004N" ~ "Black/African American", 
+    variable == "P1_006N" ~ "Asian", 
+    variable == "P2_005N" ~ "Non-Hispanic White",
+    variable == "P2_002N" ~ "Hispanic of any race"
+  ))
+
+
 vars10 <- c("P005003", "P005004", "P005006", "P004003")
 dane_2010 <- get_decennial(
   geography = "block group",
@@ -50,24 +75,13 @@ dane_2010 <- get_decennial(
   filter(summary_value != 0) %>%
   mutate(pct = 100 * (value / summary_value))
 
-dane_2020 <- get_decennial(
-  geography = "block group",
-  variables = vars10, 
-  year = 2020,
-  state = "WI",
-  county = "Dane",
-  geometry = T,
-  summary_var = "P001001") %>%
-  filter(summary_value != 0) %>%
-  mutate(pct = 100 * (value / summary_value))
+
 
 tmap_mode("view")
-dane_2010 %>%
+dane_2020 %>%
   tm_shape() +
   tm_polygons("pct") +
   tm_facets("variable")
-  ggplot(aes(fill = pct, color = pct)) +
-  geom_sf() +
-  facet_wrap(~variable)
+  
 ```
 
