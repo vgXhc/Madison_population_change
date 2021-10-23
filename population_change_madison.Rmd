@@ -30,15 +30,33 @@ Get data
 For the 2020 Census data, variables are different, as the data released is only in the format provided for redistricting. The `load_variables` command from `tidycensus` loads all variables.
 
 ```{r}
+variables_00 <- load_variables(2000, "sf1")
 variables_10 <- tidycensus::load_variables(2010, "sf1")
-
 variables_20 <- load_variables(2020, "pl")
+
+
 ```
+Unfortunately, the variables do indeed change from each dataset to the other.
+
 
 For the 2020 data, the two relevant tables are P01 (Race) and P2 ("Hispanic or Latino, and Not Hispanic or Latino by Race") for the total population. `P1_001N` is the total population. `P1_003N` is `White alone`. `P1_004N` is Black/African American alone. `P1_006N` Asian alone. `P2_005N` is non-Hispanic/Latino White. `P2_002N` is Hispanic/Latino of any race.
 
+For 2010:
+
+- P001001: Total population (to be used as the `summary_var` for percentages)
+- P005002: Not Hispanic/Latino, of any race
+- P005003: Non-Hispanic/Latino White
+- P005010: Hispanic/Latino of any race (same as P004003)
+- P003002: White alone
+- P003003: Black alone
+- P003005: Asian alone
+
+And for 2000:
+
+
 ```{r}
 vars20 <- c("P1_003N", "P1_004N", "P1_006N", "P2_005N", "P2_002N")
+vars10 <- c("P005003", "P005010", "P003002", "P003003", "P003005")
 ```
 
 Have to make decisions on block versus block group. If going with block, need to filter data to make manageable. Block groups seem a little coarse for certain purposes. 
@@ -53,17 +71,17 @@ dane_2020 <- get_decennial(
   geometry = T,
   summary_var = "P1_001N") %>%
   filter(summary_value != 0) %>%
-  mutate(pct = 100 * (value / summary_value)) %>% 
-  mutate(variable = case_when(
-    variable == "P1_003N" ~ "White alone",
-    variable == "P1_004N" ~ "Black/African American", 
-    variable == "P1_006N" ~ "Asian", 
-    variable == "P2_005N" ~ "Non-Hispanic White",
-    variable == "P2_002N" ~ "Hispanic of any race"
-  ))
+  mutate(pct = 100 * (value / summary_value), 
+         variable = case_when(
+           variable == "P1_003N" ~ "White alone",
+           variable == "P1_004N" ~ "Black/African American", 
+           variable == "P1_006N" ~ "Asian", 
+           variable == "P2_005N" ~ "Non-Hispanic White",
+           variable == "P2_002N" ~ "Hispanic of any race"),
+         year = 2020
+         )
 
 
-vars10 <- c("P005003", "P005004", "P005006", "P004003")
 dane_2010 <- get_decennial(
   geography = "block group",
   variables = vars10, 
@@ -73,15 +91,58 @@ dane_2010 <- get_decennial(
   geometry = T,
   summary_var = "P001001") %>%
   filter(summary_value != 0) %>%
-  mutate(pct = 100 * (value / summary_value))
+  mutate(pct = 100 * (value / summary_value),
+         variable = case_when(
+           variable == "P003002" ~ "White alone",
+           variable == "P003003" ~ "Black/African American",
+           variable == "P003005" ~ "Asian", 
+           variable == "P005003" ~ "Non-Hispanic White",
+           variable == "P005010" ~ "Hispanic of any race"),
+         year = 2010
+         )
+
+dane_2000 <- get_decennial(
+  geography = "block group",
+  variables = vars10, 
+  year = 2000,
+  state = "WI",
+  county = "Dane",
+  geometry = T,
+  summary_var = "P001001") %>%
+  filter(summary_value != 0) %>%
+  mutate(pct = 100 * (value / summary_value),
+         variable = case_when(
+           variable == "P003002" ~ "White alone",
+           variable == "P003003" ~ "Black/African American",
+           variable == "P003005" ~ "Asian", 
+           variable == "P005003" ~ "Non-Hispanic White",
+           variable == "P005010" ~ "Hispanic of any race"),
+         year = 2000
+         )
 
 
+# 
+# tmap_mode("view")
+# dane_2020 %>%
+#   tm_shape() +
+#   tm_polygons("pct") +
+#   tm_facets("variable")
+  
+```
 
-tmap_mode("view")
-dane_2020 %>%
+Now we combine the three datasets:
+
+```{r}
+dane_bg <- bind_rows(dane_2000, dane_2010, dane_2020)
+```
+
+Faceted plot of Black alone:
+
+```{r}
+dane_bg %>% 
+  filter(variable == "Black/African American") %>% 
   tm_shape() +
   tm_polygons("pct") +
-  tm_facets("variable")
-  
+  tm_facets("year")
 ```
 
