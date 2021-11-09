@@ -9,25 +9,34 @@ author:
     affiliation_url: https://example.com/spacelysprokets
 date: "`r Sys.Date()`"
 output: distill::distill_article
+editor_options: 
+  markdown: 
+    wrap: 72
+bibliography: references.bib
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE)
 ```
 
-We want to better understanding changes in population and demographics in small geographic areas of Madison, using Census data.
+We want to better understanding changes in population and demographics
+in small geographic areas of Madison, using Census data.
 
 ```{r}
 library(tidyverse)
 library(tidycensus)
 library(tmap)
+library(sf)
 options(tigris_use_cache = TRUE)
 ```
 
 Get data
 
 # Identifying variables
-For the 2020 Census data, variables are different, as the data released is only in the format provided for redistricting. The `load_variables` command from `tidycensus` loads all variables.
+
+For the 2020 Census data, variables are different, as the data released
+is only in the format provided for redistricting. The `load_variables`
+command from `tidycensus` loads all variables.
 
 ```{r}
 variables_00 <- load_variables(2000, "sf1")
@@ -36,30 +45,43 @@ variables_20 <- load_variables(2020, "pl")
 
 
 ```
-Unfortunately, the variables do indeed change from each dataset to the other.
 
+Unfortunately, the variables do indeed change from each dataset to the
+other.
 
-For the 2020 data, the two relevant tables are P01 (Race) and P2 ("Hispanic or Latino, and Not Hispanic or Latino by Race") for the total population. `P1_001N` is the total population. `P1_003N` is `White alone`. `P1_004N` is Black/African American alone. `P1_006N` Asian alone. `P2_005N` is non-Hispanic/Latino White. `P2_002N` is Hispanic/Latino of any race.
+For the 2020 data, the two relevant tables are P01 (Race) and P2
+("Hispanic or Latino, and Not Hispanic or Latino by Race") for the total
+population. `P1_001N` is the total population. `P1_003N` is
+`White alone`. `P1_004N` is Black/African American alone. `P1_006N`
+Asian alone. `P2_005N` is non-Hispanic/Latino White. `P2_002N` is
+Hispanic/Latino of any race.
 
 For 2010:
 
-- P001001: Total population (to be used as the `summary_var` for percentages)
-- P005002: Not Hispanic/Latino, of any race
-- P005003: Non-Hispanic/Latino White
-- P005010: Hispanic/Latino of any race (same as P004003)
-- P003002: White alone
-- P003003: Black alone
-- P003005: Asian alone
+-   P001001: Total population (to be used as the `summary_var` for
+    percentages)
+-   P005002: Not Hispanic/Latino, of any race
+-   P005003: Non-Hispanic/Latino White
+-   P005010: Hispanic/Latino of any race (same as P004003)
+-   P003002: White alone
+-   P003003: Black alone
+-   P003005: Asian alone
 
-And for 2000:
-
+And for 2000: - P001001: Total population (to be used as the
+`summary_var` for percentages) - P004003: Not Hispanic/Latino, of any
+race - P004005: Non-Hispanic/Latino White - P004002: Hispanic/Latino of
+any race - P003003: White alone - P003004: Black alone - P003006: Asian
+alone
 
 ```{r}
-vars20 <- c("P1_003N", "P1_004N", "P1_006N", "P2_005N", "P2_002N")
-vars10 <- c("P005003", "P005010", "P003002", "P003003", "P003005")
+vars20 <- c("P1_001N", "P1_003N", "P1_004N", "P1_006N", "P2_005N", "P2_002N")
+vars10 <- c("P001001", "P005003", "P005010", "P003002", "P003003", "P003005")
+vars00 <- c("P001001", "P004003", "P004005", "P004002", "P003003", "P003004", "P003006")
 ```
 
-Have to make decisions on block versus block group. If going with block, need to filter data to make manageable. Block groups seem a little coarse for certain purposes. 
+Have to make decisions on block versus block group. If going with block,
+need to filter data to make manageable. Block groups seem a little
+coarse for certain purposes.
 
 ```{r}
 dane_2020 <- get_decennial(
@@ -73,9 +95,10 @@ dane_2020 <- get_decennial(
   filter(summary_value != 0) %>%
   mutate(pct = 100 * (value / summary_value), 
          variable = case_when(
+           variable == "P1_001N" ~ "Total",
            variable == "P1_003N" ~ "White alone",
-           variable == "P1_004N" ~ "Black/African American", 
-           variable == "P1_006N" ~ "Asian", 
+           variable == "P1_004N" ~ "Black/African American alone", 
+           variable == "P1_006N" ~ "Asian alone", 
            variable == "P2_005N" ~ "Non-Hispanic White",
            variable == "P2_002N" ~ "Hispanic of any race"),
          year = 2020
@@ -93,9 +116,10 @@ dane_2010 <- get_decennial(
   filter(summary_value != 0) %>%
   mutate(pct = 100 * (value / summary_value),
          variable = case_when(
+           variable == "P001001" ~ "Total",
            variable == "P003002" ~ "White alone",
-           variable == "P003003" ~ "Black/African American",
-           variable == "P003005" ~ "Asian", 
+           variable == "P003003" ~ "Black/African American alone",
+           variable == "P003005" ~ "Asian alone", 
            variable == "P005003" ~ "Non-Hispanic White",
            variable == "P005010" ~ "Hispanic of any race"),
          year = 2010
@@ -103,7 +127,7 @@ dane_2010 <- get_decennial(
 
 dane_2000 <- get_decennial(
   geography = "block group",
-  variables = vars10, 
+  variables = vars00, 
   year = 2000,
   state = "WI",
   county = "Dane",
@@ -112,11 +136,12 @@ dane_2000 <- get_decennial(
   filter(summary_value != 0) %>%
   mutate(pct = 100 * (value / summary_value),
          variable = case_when(
-           variable == "P003002" ~ "White alone",
-           variable == "P003003" ~ "Black/African American",
-           variable == "P003005" ~ "Asian", 
-           variable == "P005003" ~ "Non-Hispanic White",
-           variable == "P005010" ~ "Hispanic of any race"),
+           variable == "P001001" ~ "Total", 
+           variable == "P003003" ~ "White alone",
+           variable == "P003004" ~ "Black/African American alone",
+           variable == "P003006" ~ "Asian alone", 
+           variable == "P004005" ~ "Non-Hispanic White",
+           variable == "P004002" ~ "Hispanic of any race"),
          year = 2000
          )
 
@@ -139,10 +164,109 @@ dane_bg <- bind_rows(dane_2000, dane_2010, dane_2020)
 Faceted plot of Black alone:
 
 ```{r}
+tmap_mode("view")
 dane_bg %>% 
-  filter(variable == "Black/African American") %>% 
+  filter(variable == "Hispanic of any race") %>% 
   tm_shape() +
-  tm_polygons("pct") +
-  tm_facets("year")
+  tm_polygons("pct", alpha = .3) +
+  tm_facets("year", sync = T)
 ```
 
+# Dealing with changing geographies
+
+Comparing the number of observations between the three years shows that
+the number of block groups has grown:
+
+```{r}
+dane_bg %>% 
+  st_drop_geometry() %>% 
+  group_by(year, variable) %>% 
+  summarize(n())
+```
+
+In the 2000 census there were only 258 block groups, whereas in 2020
+there were almost 100 more. This reflects the growth in population in
+Dane County.
+
+```{r}
+
+```
+
+Let's look at relationship files directly from the Census Bureau:
+
+```{r}
+relationships <- read_delim("data/tab2010_tab2020_st55_wi.txt", "|")
+```
+
+To aggregate at 2010 levels, we would:
+
+1.  Create GEOIDs for 2010 and 2020 in the relationship dataframe
+2.  Join `dane_2020 with`relationship`by`GEOID_20\`
+3.  Group by `GEOID_10`
+4.  Summarize counts
+
+As a check, we can see how many GEOIDs remain and if they match the
+number in `dane_2010`.
+
+```{r}
+x <- relationships %>% 
+  filter(COUNTY_2010 == "025") %>% 
+  mutate(geoid_2010 = paste0(STATE_2010, COUNTY_2010, TRACT_2010, BLK_2010),
+         geoid_2020 = paste0(STATE_2020, COUNTY_2020, TRACT_2020, BLK_2020)) %>% 
+    filter(is.na(BLOCK_PART_FLAG_O) & is.na(BLOCK_PART_FLAG_R)) %>% 
+  right_join(dane_2020, by = c("geoid_2020" = "GEOID"))
+  tm_shape()+
+  tm_polygons("red")
+  filter(geoid_2010 != geoid_2020) %>% 
+  view()
+
+
+relationships %>% 
+  filter(COUNTY_2010 == "025") %>% 
+  filter(is.na(BLOCK_PART_FLAG_O) & is.na(BLOCK_PART_FLAG_R)) %>% 
+  left_join(dane_2020, by = c("geoid_2020" = "GEOID"))
+```
+
+Unfortunately, it's even more complicated than this. As the
+documentation puts it: "Block relationships may be one-to-one,
+many-to-one, one-to-many, or many-to-many."[@bureau]
+
+An easy way to deal with this is use NHGIS Geographic Crosswalks. To
+allow for comparisons over time, the crosswalks provides interpolation
+weights that "indicates the proportion of a source zone's
+characteristics that should be allocated to a specific target
+zone."[@schroeder2007]
+
+To get a better sense of what these changes look like geographically, I
+will explore the geographies in some more detail.
+
+```{r}
+blocks2000 <- tigris::blocks(55, county = "025", year = 2000) %>% 
+  mutate(year = 2000) %>% 
+  rename(GEOID = BLKIDFP00,
+         ALAND = ALAND00) %>% 
+  select(GEOID, ALAND, year, geometry)
+
+blocks2010 <- tigris::blocks(55, county = "025", year = 2010) %>% 
+  mutate(year = 2010) %>% 
+  rename(GEOID = GEOID10,
+         ALAND = ALAND10) %>% 
+  select(GEOID, ALAND, year, geometry)
+
+
+blocks2020 <- tigris::blocks(55, county = "025", year = 2020) %>% 
+  mutate(year = 2020) %>% 
+  rename(GEOID = GEOID10,
+         ALAND = ALAND10) %>% 
+  select(GEOID, ALAND, year, geometry)
+
+blocks <- rbind(blocks2000, blocks2010, blocks2020)
+
+```
+
+```{r}
+tmap_mode("view")
+tm_shape(blocks) +
+  tm_polygons() +
+  tm_facets("year", sync = T)
+```
